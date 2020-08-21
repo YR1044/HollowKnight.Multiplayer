@@ -10,6 +10,8 @@ namespace MultiplayerClient
     {
         Welcome = 1,
         SpawnPlayer,
+        TextureFragment,
+        TextureRequest,
         DestroyPlayer,
         PvPEnabled,
         PlayerPosition,
@@ -18,12 +20,15 @@ namespace MultiplayerClient
         HealthUpdated,
         CharmsUpdated,
         PlayerDisconnected,
+        DisconnectPlayer,
     }
 
     /// <summary>Sent from client to server.</summary>
     public enum ClientPackets
     {
         WelcomeReceived = 1,
+        TextureFragment,
+        TextureRequest,
         PlayerPosition,
         PlayerScale,
         PlayerAnimation,
@@ -31,8 +36,12 @@ namespace MultiplayerClient
         HealthUpdated,
         CharmsUpdated,
         PlayerDisconnected,
+        SyncEnemy,
+        EnemyPosition,
+        EnemyScale,
+        EnemyAnimation,
     }
-
+    
     public class Packet : IDisposable
     {
         private List<byte> buffer;
@@ -81,6 +90,13 @@ namespace MultiplayerClient
             buffer.InsertRange(0, BitConverter.GetBytes(buffer.Count)); // Insert the byte length of the packet at the very beginning
         }
 
+        /// <summary>Inserts the given byte at the start of the buffer.</summary>
+        /// <param name="value">The byte to insert.</param>
+        public void InsertByte(byte value)
+        {
+            buffer.InsertRange(0, BitConverter.GetBytes(value)); // Insert the byte at the start of the buffer
+        }
+        
         /// <summary>Inserts the given int at the start of the buffer.</summary>
         /// <param name="value">The int to insert.</param>
         public void InsertInt(int value)

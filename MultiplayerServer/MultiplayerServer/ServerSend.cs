@@ -6,13 +6,13 @@ namespace MultiplayerServer
 {
     public class ServerSend
     {
-        private static void SendTCPData(int toClient, Packet packet)
+        private static void SendTCPData(byte toClient, Packet packet)
         {
             packet.WriteLength();
             Server.clients[toClient].tcp.SendData(packet);
         }
 
-        private static void SendUDPData(int toClient, Packet packet)
+        private static void SendUDPData(byte toClient, Packet packet)
         {
             packet.WriteLength();
             Server.clients[toClient].udp.SendData(packet);
@@ -30,7 +30,7 @@ namespace MultiplayerServer
             }
         }
 
-        private static void SendTCPDataToAll(int exceptClient, Packet packet)
+        private static void SendTCPDataToAll(byte exceptClient, Packet packet)
         {
             packet.WriteLength();
             for (int i = 1; i <= Server.MaxPlayers; i++)
@@ -57,7 +57,7 @@ namespace MultiplayerServer
             }
         }
 
-        private static void SendUDPDataToAll(int exceptClient, Packet packet)
+        private static void SendUDPDataToAll(byte exceptClient, Packet packet)
         {
             packet.WriteLength();
             for (int i = 1; i <= Server.MaxPlayers; i++)
@@ -72,7 +72,7 @@ namespace MultiplayerServer
             }
         }
         
-        public static void Welcome(int toClient, string msg)
+        public static void Welcome(byte toClient, string msg)
         {
             using (Packet packet = new Packet((int) ServerPackets.Welcome))
             {
@@ -83,7 +83,18 @@ namespace MultiplayerServer
             }
         }
 
-        public static void SpawnPlayer(int toClient, Player player)
+        public static void RequestTexture(byte toClient, byte[] hash)
+        {
+            if (!ServerSettings.CustomKnightIntegration) return;
+
+            using(Packet packet = new Packet((int) ServerPackets.TextureRequest))
+            {
+                packet.Write(hash);
+                SendTCPData(toClient, packet);
+            }
+        }
+
+        public static void SpawnPlayer(byte toClient, Player player)
         {
             using (Packet packet = new Packet((int) ServerPackets.SpawnPlayer))
             {
@@ -98,12 +109,35 @@ namespace MultiplayerServer
                 }
                 packet.Write(ServerSettings.PvPEnabled);
 
+                Log("Player texture hashes length: " + player.textureHashes.Count);
+                foreach(var hash in player.textureHashes)
+                {
+                    packet.Write(hash);
+                }
+
                 Log($"Spawning Player {player.id} on Client {toClient} with Charms");
                 SendTCPData(toClient, packet);
             }
         }
 
-        public static void DestroyPlayer(int toClient, int clientToDestroy)
+        #region CustomKnight Integration
+
+        public static void SendTexture(byte fromClient, byte[] hash, byte[] texture)
+        {
+            using (Packet packet = new Packet((int) ServerPackets.TextureFragment))
+            {
+                // Since the ordering of TCP packets is guaranteed, we don't have
+                // to put it in the packet - the client will handle it just fine.
+                packet.Write(hash);
+                packet.Write(texture.Length);
+                packet.Write(texture);
+                SendTCPData(fromClient, packet);
+            }
+        }
+        
+        #endregion CustomKnight Integration
+        
+        public static void DestroyPlayer(byte toClient, int clientToDestroy)
         {
             using (Packet packet = new Packet((int) ServerPackets.DestroyPlayer))
             {
@@ -151,12 +185,12 @@ namespace MultiplayerServer
             {
                 packet.Write(player.id);
                 packet.Write(player.animation);
-                
+             
                 SendUDPDataToAll(player.id, packet);
             }
         }
 
-        public static void HealthUpdated(int fromClient, int health, int maxHealth, int healthBlue)
+        public static void HealthUpdated(byte fromClient, int health, int maxHealth, int healthBlue)
         {
             using (Packet packet = new Packet((int) ServerPackets.HealthUpdated))
             {
@@ -170,7 +204,7 @@ namespace MultiplayerServer
             }
         }
         
-        public static void CharmsUpdated(int fromClient, Player player)
+        public static void CharmsUpdated(byte fromClient, Player player)
         {
             using (Packet packet = new Packet((int) ServerPackets.CharmsUpdated))
             {
@@ -184,7 +218,7 @@ namespace MultiplayerServer
             }
         }
 
-        public static void PlayerDisconnected(int playerId)
+        public static void PlayerDisconnected(byte playerId)
         {
             using (Packet packet = new Packet((int) ServerPackets.PlayerDisconnected))
             {
@@ -192,6 +226,15 @@ namespace MultiplayerServer
 
                 Log("Sending Disconnect Packet to all clients but " + playerId);
                 SendTCPDataToAll(playerId, packet); 
+            }
+        }
+
+        public static void DisconnectPlayer(byte playerId)
+        {
+            Log("Sending Disconnect Packet to everyone");
+            using (Packet packet = new Packet((int) ServerPackets.DisconnectPlayer))
+            { 
+                SendTCPData(playerId, packet);
             }
         }
 

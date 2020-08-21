@@ -3,21 +3,20 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using ModCommon.Util;
-using On.HutongGames.PlayMaker.Actions;
 using UnityEngine;
 
 namespace MultiplayerServer
 {
     public class Client
     {
-        public static int dataBufferSize = 4096;
+        public static int dataBufferSize = (int) Mathf.Pow(2, 20);
         
-        public int id;
+        public byte id;
         public Player player;
         public TCP tcp;
         public UDP udp;
 
-        public Client(int clientID)
+        public Client(byte clientID)
         {
             id = clientID;
             tcp = new TCP(id);
@@ -28,12 +27,12 @@ namespace MultiplayerServer
         {
             public TcpClient socket;
 
-            private readonly int id;
+            private readonly byte id;
             private NetworkStream stream;
             private Packet receivedData;
             private byte[] receiveBuffer;
 
-            public TCP(int id)
+            public TCP(byte id)
             {
                 this.id = id;
             }
@@ -129,7 +128,14 @@ namespace MultiplayerServer
                         using (Packet packet = new Packet(packetBytes))
                         {
                             int packetId = packet.ReadInt();
-                            Server.PacketHandlers[packetId](id, packet);
+                            try
+                            {
+                                Server.PacketHandlers[packetId](id, packet);
+                            }
+                            catch(KeyNotFoundException)
+                            {
+                                Log("Packet ID " + id + " not handled. Ignoring.");
+                            }
                         }
                     });
 
@@ -169,9 +175,9 @@ namespace MultiplayerServer
         {
             public IPEndPoint endPoint;
 
-            private int id;
+            private byte id;
 
-            public UDP(int id)
+            public UDP(byte id)
             {
                 this.id = id;
             }
@@ -224,16 +230,16 @@ namespace MultiplayerServer
         /// <param name="maxHealth">The maximum health of the new player.</param>
         /// <param name="healthBlue">The blue health of the new player.</param>
         /// <param name="charmsData">The equipped charms of the new player.</param>
-        public void SendIntoGame(string username, Vector3 position, Vector3 scale, string animation, int health, int maxHealth, int healthBlue, List<bool> charmsData)
+        public void SendIntoGame(string username, Vector3 position, Vector3 scale, string animation, int health, int maxHealth, int healthBlue, List<bool> charmsData, bool isHost)
         {
             player = NetworkManager.Instance.InstantiatePlayer(position, scale);
-            player.Initialize(id, username, animation, health, maxHealth, healthBlue);
+            player.Initialize(id, username, animation, health, maxHealth, healthBlue, isHost);
 
             for (int charmNum = 1; charmNum <= 40; charmNum++)
             {
                 player.SetAttr("equippedCharm_" + charmNum, charmsData[charmNum - 1]);
             }
-            
+
             UnityEngine.Object.DontDestroyOnLoad(player);
         }
 

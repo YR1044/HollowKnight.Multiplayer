@@ -84,6 +84,7 @@
     <Compile Include="Canvas\OptionsPanel.cs" />
     <Compile Include="Client.cs" />
     <Compile Include="Constants.cs" />
+    <Compile Include="Extensions.cs" />
     <Compile Include="ServerSettings.cs" />
     <Compile Include="MPServer.cs" />
     <Compile Include="MultiplayerServer.cs" />
@@ -95,6 +96,7 @@
     <Compile Include="ServerHandle.cs" />
     <Compile Include="ServerSend.cs" />
     <Compile Include="ThreadManager.cs" />
+    <Compile Include="Util.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Images\Checkmark.png" />

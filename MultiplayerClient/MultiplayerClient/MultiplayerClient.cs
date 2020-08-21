@@ -1,7 +1,7 @@
 ﻿using System;
-using System.Collections;
+using System.IO;
 using System.Collections.Generic;
-using ModCommon;
+using System.Linq;
 using Modding;
 using MultiplayerClient.Canvas;
 using UnityEngine;
@@ -9,9 +9,16 @@ using UnityEngine.SceneManagement;
 
 namespace MultiplayerClient
 {
-    public class MultiplayerClient : Mod
+    public class MultiplayerClient : Mod<SaveSettings, GlobalSettings>
     {
         public static readonly Dictionary<string, GameObject> GameObjects = new Dictionary<string, GameObject>();
+        internal static GlobalSettings settings;
+
+        public static MultiplayerClient Instance;
+        
+        public static Dictionary<byte[], string> textureCache = new Dictionary<byte[], string>(new ByteArrayComparer());
+
+        public static string CustomKnightDir;
         
         public override string GetVersion()
         {
@@ -29,38 +36,61 @@ namespace MultiplayerClient
 
         public override void Initialize(Dictionary<string, Dictionary<string, GameObject>> preloadedObjects)
         {
+            settings = GlobalSettings;
+
+            // Initialize texture cache
+            // This will allow us to easily send textures to the server when asked to.
+            string cacheDir = Path.Combine(Application.dataPath, "SkinCache");
+            Directory.CreateDirectory(cacheDir);
+            string[] files = Directory.GetFiles(cacheDir);
+            foreach(string filePath in files)
+            {
+                string filename = Path.GetFileName(filePath);
+                byte[] hash = new byte[20];
+                for (int i = 0; i < 40; i += 2)
+                {
+                    hash[i / 2] = Convert.ToByte(filename.Substring(i, 2), 16);
+                }
+
+                textureCache[hash] = filePath;
+            }
+            
+            switch (SystemInfo.operatingSystemFamily)
+            {
+                case OperatingSystemFamily.MacOSX:
+                    CustomKnightDir = Path.GetFullPath(Application.dataPath + "/Resources/Data/Managed/Mods/CustomKnight");
+                    break;
+                default:
+                    CustomKnightDir = Path.GetFullPath(Application.dataPath + "/Managed/Mods/CustomKnight");
+                    break;
+            }
+
             GameObjects.Add("Glob", preloadedObjects["GG_Hive_Knight"]["Battle Scene/Globs/Hive Knight Glob"]);
             GameObjects.Add("Slash", preloadedObjects["GG_Hive_Knight"]["Battle Scene/Hive Knight/Slash 1"]);
 
+            Instance = this;
+            
             GUIController.Instance.BuildMenus();
 
-            global::GameManager.instance.gameObject.AddComponent<MPClient>();
+            GameManager.instance.gameObject.AddComponent<MPClient>();
 
             Unload();
             
-            ModHooks.Instance.BeforeSavegameSaveHook += RespawnFix;
             ModHooks.Instance.CharmUpdateHook += OnCharmUpdate;
+            ModHooks.Instance.ApplicationQuitHook += OnApplicationQuit;
             UnityEngine.SceneManagement.SceneManager.activeSceneChanged += OnSceneChanged;
-            
         }
-        
-        private void RespawnFix(SaveGameData data)
-        {
-            PlayerData playerData = data.playerData;
-            foreach (GameObject go in GameObject.FindObjectsOfType<GameObject>())
-            {
-                if (go.name.Contains("RestBench") || 
-                    go.name.Contains("WhiteBench") ||
-                    go.name.Contains("Death Respawn"))
-                {
-                    playerData.respawnScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-                    playerData.respawnMarkerName = go.name;
 
-                    break;
-                }
+        private void OnApplicationQuit()
+        {
+            SaveGlobalSettings();
+
+            if (Client.Instance != null)
+            {
+                Client.Instance.Disconnect();
             }
         }
-        
+
         private void OnCharmUpdate(PlayerData pd, HeroController hc)
         {
             if (Client.Instance != null && Client.Instance.isConnected && pd != null && hc != null)
@@ -71,7 +101,6 @@ namespace MultiplayerClient
 
         private void Unload()
         {
-            ModHooks.Instance.BeforeSavegameSaveHook -= RespawnFix;
             ModHooks.Instance.CharmUpdateHook -= OnCharmUpdate;
             UnityEngine.SceneManagement.SceneManager.activeSceneChanged -= OnSceneChanged;
         }
@@ -112,11 +141,21 @@ namespace MultiplayerClient
                 {
                     ClientSend.SceneChanged(nextScene.name);
                 }
+
+                if (Client.Instance.isHost && SessionManager.Instance.Players.Count > 0)
+                {
+                    GameObject[] enemies = UnityEngine.Object.FindObjectsOfType<GameObject>().Where(go => go.layer == 11 || go.layer == 17) as GameObject[];
+                    if (enemies != null)
+                    {
+                        foreach (GameObject enemy in enemies)
+                        {
+                            enemy.AddComponent<EnemyTracker>();
+                        }
+                    }
+                }
             }
             
-            GameManager.Instance.DestroyAllPlayers();
+            SessionManager.Instance.DestroyAllPlayers();
         }
-        
-        private static void Log(object message) => Modding.Logger.Log("[Multiplayer Client] " + message);
     }
 }

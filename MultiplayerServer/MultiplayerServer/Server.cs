@@ -5,12 +5,28 @@ using System.Net.Sockets;
 
 namespace MultiplayerServer
 {
+    public enum TextureType
+    {
+        Baldur,
+        Fluke,
+        Grimm,
+        Hatchling,
+        Knight,
+        Shield,
+        Sprint,
+        Unn,
+        Void,
+        VS,
+        Weaver,
+        Wraiths,
+    }
+
     public class Server
     {
         public static int MaxPlayers { get; private set; }
         public static int Port { get; private set; }
         public static Dictionary<int, Client> clients = new Dictionary<int, Client>();
-        public delegate void PacketHandler(int fromClient, Packet packet);
+        public delegate void PacketHandler(byte fromClient, Packet packet);
 
         public static Dictionary<int, PacketHandler> PacketHandlers;
 
@@ -113,7 +129,7 @@ namespace MultiplayerServer
         
         private static void InitializeServerData()
         {
-            for (int i = 1; i <= MaxPlayers; i++)
+            for (byte i = 1; i <= MaxPlayers; i++)
             {
                 clients.Add(i, new Client(i));
             }
@@ -121,6 +137,8 @@ namespace MultiplayerServer
             PacketHandlers = new Dictionary<int, PacketHandler>
             {
                 { (int) ClientPackets.WelcomeReceived, ServerHandle.WelcomeReceived },
+                { (int) ClientPackets.TextureFragment, ServerHandle.HandleTextureFragment },
+                { (int) ClientPackets.TextureRequest, ServerHandle.HandleTextureRequest },
                 { (int) ClientPackets.PlayerPosition, ServerHandle.PlayerPosition },
                 { (int) ClientPackets.PlayerScale, ServerHandle.PlayerScale },
                 { (int) ClientPackets.PlayerAnimation, ServerHandle.PlayerAnimation },
@@ -128,6 +146,10 @@ namespace MultiplayerServer
                 { (int) ClientPackets.HealthUpdated, ServerHandle.HealthUpdated },
                 { (int) ClientPackets.CharmsUpdated, ServerHandle.CharmsUpdated },
                 { (int) ClientPackets.PlayerDisconnected, ServerHandle.PlayerDisconnected },
+                { (int) ClientPackets.SyncEnemy, ServerHandle.SyncEnemy },
+                { (int) ClientPackets.EnemyPosition, ServerHandle.EnemyPosition },
+                { (int) ClientPackets.EnemyScale, ServerHandle.EnemyScale },
+                { (int) ClientPackets.EnemyAnimation, ServerHandle.EnemyAnimation },
             };
             
             Log("Initialized Packets.");

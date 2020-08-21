@@ -1,12 +1,32 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using HutongGames.PlayMaker.Actions;
+using ModCommon;
+using ModCommon.Util;
+using UnityEngine;
 
 namespace MultiplayerClient
 {
+    public enum TextureType
+    {
+        Baldur,
+        Fluke,
+        Grimm,
+        Hatchling,
+        Knight,
+        Shield,
+        Sprint,
+        Unn,
+        Void,
+        VS,
+        Weaver,
+        Wraiths,
+    }
+
     public class PlayerManager : MonoBehaviour
     {
         public static PlayerManager Instance;
         
-        public int id;
+        public byte id;
         public string username;
 
         public static string activeScene;
@@ -55,12 +75,15 @@ namespace MultiplayerClient
         public int health;
         public int maxHealth;
         public int healthBlue;
-        
+
+        public Dictionary<byte[], TextureType> texHashes = new Dictionary<byte[], TextureType>(new ByteArrayComparer());
+        public Dictionary<TextureType, Texture2D> textures = new Dictionary<TextureType, Texture2D>();
+
         private void Awake()
         {
             Instance = this;
         }
-
+        
         private void Log(object message) => Modding.Logger.Log("[Player Manager] " + message);
     }
 }

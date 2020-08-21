@@ -1,16 +1,10 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using GlobalEnums;
-using HutongGames.PlayMaker;
-using HutongGames.PlayMaker.Actions;
-using ModCommon;
+﻿using GlobalEnums;
 using ModCommon.Util;
-using Modding;
+using System.Collections;
+using System.IO;
+using System.Security.Cryptography;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using Random = UnityEngine.Random;
 
 namespace MultiplayerClient
 {
@@ -43,15 +37,50 @@ namespace MultiplayerClient
 
             Log("Creating Client Manager");
             GameObject clientManager = new GameObject("Client Manager");
-            clientManager.AddComponent<Client>();
+            Client client = clientManager.AddComponent<Client>();
             clientManager.AddComponent<ThreadManager>();
-            
-            Log("Creating Game Manager");
-            GameObject gameManager = new GameObject("Game Manager");
-            gameManager.AddComponent<GameManager>();
-
             DontDestroyOnLoad(clientManager);
-            DontDestroyOnLoad(gameManager);
+
+            string serverDllLoc;
+            switch (SystemInfo.operatingSystemFamily)
+            {
+                case OperatingSystemFamily.MacOSX:
+                    serverDllLoc = Path.GetFullPath(Application.dataPath + "/Resources/Data/Managed/Mods/MultiplayerServer.dll");
+                    break;
+                default:
+                    serverDllLoc = Path.GetFullPath(Application.dataPath + "/Managed/Mods/MultiplayerServer.dll");
+                    break;
+            }
+            
+# if DEBUG
+            if (File.Exists(serverDllLoc))
+            {
+                Client.Instance.isHost = true;
+            }
+# endif
+            
+# if RELEASE
+            if (File.Exists(serverDllLoc))
+            {
+                string sha1Sum;
+                using (var sha1 = new SHA1CryptoServiceProvider())
+                {
+                    byte[] dllBytes = File.ReadAllBytes(serverDllLoc);
+                    byte[] hashBytes = sha1.ComputeHash(dllBytes);
+                    sha1Sum = BitConverter.ToString(hashBytes);
+                    
+                    if (sha1Sum == "a670ab100f19f771573b6831f48f58330cabd484")
+                    {
+                        Client.Instance.isHost = true;
+                    }
+                }    
+            }
+# endif
+            
+            Log("Creating Session Manager");
+            GameObject sessionManager = new GameObject("Session Manager");
+            sessionManager.AddComponent<SessionManager>();
+            DontDestroyOnLoad(sessionManager);
 
             _playerPrefab = new GameObject(
                 "PlayerPrefab",
@@ -96,12 +125,9 @@ namespace MultiplayerClient
             
             DontDestroyOnLoad(_playerPrefab);
             
-            GameManager.Instance.playerPrefab = _playerPrefab;
+            SessionManager.Instance.playerPrefab = _playerPrefab;
             
-            HeroController.instance.OnDeath += HeroDeath;
             UnityEngine.SceneManagement.SceneManager.activeSceneChanged += OnSceneChange;
-            On.GameManager.WarpToDreamGate += OnWarpToDG;
-            On.HeroController.EnterSceneDreamGate += OnEnterSceneDG;
             On.HeroController.TakeDamage += OnTakeDamage;
             On.HeroController.AddHealth += OnAddHealth;
             On.HeroController.MaxHealth += OnMaxHealth;
@@ -110,10 +136,16 @@ namespace MultiplayerClient
         private void OnTakeDamage(On.HeroController.orig_TakeDamage orig, HeroController hc, GameObject go,
             CollisionSide damageSide, int damageAmount, int hazardType)
         {
+            int oldHealth = PlayerData.instance.health;
             orig(hc, go, damageSide, damageAmount, hazardType);
 
-            Log("Took Damage: " + PlayerData.instance.health + " " + PlayerData.instance.maxHealth);
-            ClientSend.HealthUpdated(PlayerData.instance.health, PlayerData.instance.maxHealth, PlayerData.instance.healthBlue);
+            // OnTakeDamage is called even when the player has iframes.
+            // And it is called a LOT, so to avoid spamming the server, we check if the health changed before sending.
+            if(PlayerData.instance.health != oldHealth)
+            {
+                Log("Took Damage: " + PlayerData.instance.health + " " + PlayerData.instance.maxHealth);
+                ClientSend.HealthUpdated(PlayerData.instance.health, PlayerData.instance.maxHealth, PlayerData.instance.healthBlue);
+            }
         }
 
         private void OnAddHealth(On.HeroController.orig_AddHealth orig, HeroController hc, int amount)
@@ -131,21 +163,10 @@ namespace MultiplayerClient
             Log("Maxed Health: " + PlayerData.instance.health + " " + PlayerData.instance.maxHealth);
             ClientSend.HealthUpdated(PlayerData.instance.health, PlayerData.instance.maxHealth, PlayerData.instance.healthBlue);
         }
-        
-        private void OnWarpToDG(On.GameManager.orig_WarpToDreamGate orig, global::GameManager gm)
-        {
-            try
-            {
-                orig(gm);
-            }
-            catch (Exception e)
-            {
-                Log("Could not warp to DG: " + e);
-            }
-        }
-        
+
         private void OnSceneChange(Scene prevScene, Scene nextScene)
         {
+            // Transition from non-gameplay scene to gameplay scene, e.g. title screen to in game
             if (MultiplayerClient.NonGameplayScenes.Contains(prevScene.name) &&
                 !MultiplayerClient.NonGameplayScenes.Contains(nextScene.name))
             {
@@ -177,23 +198,6 @@ namespace MultiplayerClient
                 });
             }
         }
-        
-        private void OnEnterSceneDG(On.HeroController.orig_EnterSceneDreamGate orig, HeroController self)
-        {
-            try
-            {
-                orig(self);
-            }
-            catch (Exception e)
-            {
-                Log(e);
-            }
-        }
-        
-        private void HeroDeath()
-        {
-            
-        }
 
         private string _storedClip;
         private void AnimationEventDelegate(tk2dSpriteAnimator anim, tk2dSpriteAnimationClip clip, int frameNum)
@@ -210,6 +214,14 @@ namespace MultiplayerClient
             }
         }
 
+        private void OnDestroy()
+        {
+            UnityEngine.SceneManagement.SceneManager.activeSceneChanged -= OnSceneChange;
+            On.HeroController.TakeDamage -= OnTakeDamage;
+            On.HeroController.AddHealth -= OnAddHealth;
+            On.HeroController.MaxHealth -= OnMaxHealth;
+        }
+        
         private static void Log(object message) => Modding.Logger.Log("[MP Client] " + message);
     }
 }

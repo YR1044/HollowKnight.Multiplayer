@@ -1,23 +1,22 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using HutongGames.PlayMaker.Actions;
+using ModCommon;
+using ModCommon.Util;
+using MultiplayerClient.Canvas;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace MultiplayerClient
 {
     public class Client : MonoBehaviour
     {
         public static Client Instance;
-        public static int dataBufferSize = 4096;
-
-        public string host = "localhost";
-        public int port = 26950;
-        public string username = "Default";
-        public int myId;
+        public static int dataBufferSize = (int) Mathf.Pow(2, 20);
+        
+        public bool isHost;
+        public byte myId;
         public TCP tcp;
         public UDP udp;
 
@@ -44,11 +43,6 @@ namespace MultiplayerClient
         {
             tcp = new TCP();
             udp = new UDP();
-        }
-        
-        private void OnApplicationQuit()
-        {
-            Disconnect();
         }
 
         /// <summary>Attempts to connect to the server.</summary>
@@ -79,7 +73,7 @@ namespace MultiplayerClient
                 };
 
                 receiveBuffer = new byte[dataBufferSize];
-                socket.BeginConnect(Instance.host, Instance.port, ConnectCallback, socket);
+                socket.BeginConnect(MultiplayerClient.settings.host, MultiplayerClient.settings.port, ConnectCallback, socket);
             }
 
             /// <summary>Initializes the newly connected client's TCP-related info.</summary>
@@ -169,7 +163,14 @@ namespace MultiplayerClient
                         using (Packet packet = new Packet(packetBytes))
                         {
                             int packetId = packet.ReadInt();
-                            _packetHandlers[packetId](packet);
+                            if(_packetHandlers.ContainsKey(packetId))
+                            {
+                                _packetHandlers[packetId](packet);
+                            }
+                            else
+                            {
+                                Log("Unhandled packet type " + packetId + "!");
+                            }
                         }
                     });
 
@@ -219,7 +220,7 @@ namespace MultiplayerClient
             {
                 endPoint = new IPEndPoint(IPAddress.Any, localPort);
                 socket = new UdpClient(localPort);
-                socket.Connect(Instance.host, Instance.port);
+                socket.Connect(MultiplayerClient.settings.host, MultiplayerClient.settings.port);
                 socket.BeginReceive(ReceiveCallback, null);
 
                 using (Packet packet = new Packet())
@@ -239,7 +240,7 @@ namespace MultiplayerClient
                     {
                         if (!socket.Client.Connected)
                         {
-                            socket.Connect(Instance.host, Instance.port);
+                            socket.Connect(MultiplayerClient.settings.host, MultiplayerClient.settings.port);
                             socket.BeginReceive(ReceiveCallback, null);
                         }
 
@@ -318,6 +319,8 @@ namespace MultiplayerClient
             {
                 { (int) ServerPackets.Welcome, ClientHandle.Welcome },
                 { (int) ServerPackets.SpawnPlayer, ClientHandle.SpawnPlayer },
+                { (int) ServerPackets.TextureFragment, ClientHandle.LoadTexture },
+                { (int) ServerPackets.TextureRequest, ClientHandle.HandleTextureRequest },
                 { (int) ServerPackets.DestroyPlayer, ClientHandle.DestroyPlayer },
                 { (int) ServerPackets.PvPEnabled, ClientHandle.PvPEnabled },
                 { (int) ServerPackets.PlayerPosition, ClientHandle.PlayerPosition },
@@ -326,23 +329,30 @@ namespace MultiplayerClient
                 { (int) ServerPackets.HealthUpdated, ClientHandle.HealthUpdated },
                 { (int) ServerPackets.CharmsUpdated, ClientHandle.CharmsUpdated },
                 { (int) ServerPackets.PlayerDisconnected, ClientHandle.PlayerDisconnected },
+                { (int) ServerPackets.DisconnectPlayer, ClientHandle.DisconnectSelf },
             };
+            
             Log("Initialized Packets.");
         }
 
         /// <summary>Disconnects from the server and stops all network traffic.</summary>
         public void Disconnect()
         {
-            if (isConnected)
-            {
-                isConnected = false;
-                tcp.socket.Close();
-                udp.socket.Close();
+            isConnected = false;
 
+            if (tcp.socket.Connected)
+            {
+                ClientSend.PlayerDisconnected(Instance.myId);
+                tcp.socket.Close();
                 Log("You have been disconnected from the server.");
             }
             
-            GameManager.Instance.DestroyAllPlayers();
+            udp.Disconnect();
+            
+            SessionManager.Instance.DestroyAllPlayers();
+            
+            ConnectionPanel.ConnectButton.UpdateText("Connect");
+            ConnectionPanel.ConnectionInfo.UpdateText("Disconnected.");
         }
 
         private static void Log(object message) => Modding.Logger.Log("[Client] (Client) " + message);

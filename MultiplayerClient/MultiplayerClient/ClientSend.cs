@@ -1,5 +1,4 @@
 ﻿using ModCommon.Util;
-using MultiplayerClient.Canvas;
 using UnityEngine;
 
 namespace MultiplayerClient
@@ -21,18 +20,19 @@ namespace MultiplayerClient
             packet.WriteLength();
             Client.Instance.udp.SendData(packet);
         }
-        
-        #region Packets
+
+        #region Player Packets
 
         /// <summary>Lets the server know that the welcome message was received.</summary>
-        public static void WelcomeReceived()
+        public static void WelcomeReceived(/*List<byte[]> textureHashes, */bool isHost)
         {
-            using (Packet packet = new Packet((int) ClientPackets.WelcomeReceived))
+            using (Packet packet = new Packet((int)ClientPackets.WelcomeReceived))
             {
                 Transform heroTransform = HeroController.instance.gameObject.transform;
-                
+
                 packet.Write(Client.Instance.myId);
-                packet.Write(Client.Instance.username);
+                packet.Write(MultiplayerClient.settings.username);
+                packet.Write(isHost);
                 packet.Write(HeroController.instance.GetComponent<tk2dSpriteAnimator>().CurrentClip.name);
                 packet.Write(PlayerManager.activeScene);
                 packet.Write(heroTransform.position);
@@ -45,13 +45,38 @@ namespace MultiplayerClient
                 {
                     packet.Write(PlayerData.instance.GetAttr<PlayerData, bool>("equippedCharm_" + charmNum));
                 }
-                
+
+                /*foreach (var hash in textureHashes)
+                {
+                    packet.Write(hash);
+                }*/
+
                 Log("Welcome Received Packet Length: " + packet.Length());
 
                 SendTCPData(packet);
             }
         }
 
+        public static void RequestTexture(byte[] hash)
+        {
+            using (Packet packet = new Packet((int)ClientPackets.TextureRequest))
+            {
+                packet.Write(hash);
+                SendTCPData(packet);
+            }
+        }
+
+        public static void SendTexture(byte[] texture)
+        {
+            using (Packet packet = new Packet((int) ClientPackets.TextureFragment))
+            {
+                // It's really that easy
+                packet.Write(texture.Length);
+                packet.Write(texture);
+                SendTCPData(packet);
+            }
+        }
+        
         public static void PlayerPosition(Vector3 position)
         {
             using (Packet packet = new Packet((int) ClientPackets.PlayerPosition))
@@ -100,7 +125,6 @@ namespace MultiplayerClient
                 packet.Write(currentMaxHealth);
                 packet.Write(currentHealthBlue);
 
-                Log("Sending Health Data to Server");
                 SendTCPData(packet);
             }
         }
@@ -114,8 +138,6 @@ namespace MultiplayerClient
                     packet.Write(pd.GetBool("equippedCharm_" + i));
                 }
 
-                Log("Packet Length: " + packet.Length());
-                Log("Sending CharmsUpdated Packet from Client");
                 SendTCPData(packet);
             }
         }
@@ -130,8 +152,53 @@ namespace MultiplayerClient
             }
         }
         
-        #endregion
+        #endregion Player Packets
 
+        # region Enemy Packets
+
+        public static void SyncEnemy(byte toClient, string goName)
+        {
+            using (Packet packet = new Packet((int) ClientPackets.SyncEnemy))
+            {
+                packet.Write(toClient);
+                packet.Write(goName);
+
+                SendTCPData(packet);
+            }
+        }
+        
+        public static void EnemyPosition(Vector3 position)
+        {
+            using (Packet packet = new Packet((int) ClientPackets.EnemyPosition))
+            {
+                packet.Write(position);
+                
+                SendUDPData(packet);
+            }
+        }
+        
+        public static void EnemyScale(Vector3 scale)
+        {
+            using (Packet packet = new Packet((int) ClientPackets.EnemyScale))
+            {
+                packet.Write(scale);
+                
+                SendUDPData(packet);
+            }
+        }
+        
+        public static void EnemyAnimation(string clipName)
+        {
+            using (Packet packet = new Packet((int) ClientPackets.EnemyAnimation))
+            {
+                packet.Write(clipName);
+                
+                SendUDPData(packet);
+            }
+        }
+        
+        # endregion Enemy Packets
+        
         private static void Log(object message) => Modding.Logger.Log("[Client Send] " + message);
     }
 }

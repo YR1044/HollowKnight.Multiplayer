@@ -10,6 +10,8 @@ namespace MultiplayerServer
     {
         Welcome = 1,
         SpawnPlayer,
+        TextureFragment,
+        TextureRequest,
         DestroyPlayer,
         PvPEnabled,
         PlayerPosition,
@@ -18,12 +20,15 @@ namespace MultiplayerServer
         HealthUpdated,
         CharmsUpdated,
         PlayerDisconnected,
+        DisconnectPlayer,
     }
 
     /// <summary>Sent from client to server.</summary>
     public enum ClientPackets
     {
         WelcomeReceived = 1,
+        TextureFragment,
+        TextureRequest,
         PlayerPosition,
         PlayerScale,
         PlayerAnimation,
@@ -31,6 +36,10 @@ namespace MultiplayerServer
         HealthUpdated,
         CharmsUpdated,
         PlayerDisconnected,
+        SyncEnemy,
+        EnemyPosition,
+        EnemyScale,
+        EnemyAnimation,
     }
 
     public class Packet : IDisposable

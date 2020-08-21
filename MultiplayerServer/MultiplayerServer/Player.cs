@@ -1,18 +1,23 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using HutongGames.PlayMaker.Actions;
+using ModCommon;
+using ModCommon.Util;
 using UnityEngine;
 
 namespace MultiplayerServer
 {
     public class Player : MonoBehaviour
     {
-        public int id;
+        public byte id;
         public string username;
         public string animation;
         public string activeScene;
         public Vector3 position;
         public Vector3 scale;
-
+        public bool isHost;
+        
         public bool equippedCharm_1;
         public bool equippedCharm_2;
         public bool equippedCharm_3;
@@ -58,7 +63,9 @@ namespace MultiplayerServer
         public int maxHealth;
         public int healthBlue;
 
-        public void Initialize(int id, string username, string animation, int health, int maxHealth, int healthBlue)
+        public List<byte[]> textureHashes = new List<byte[]>();
+        
+        public void Initialize(byte id, string username, string animation, int health, int maxHealth, int healthBlue, bool isHost)
         {
             this.id = id;
             this.username = username;
@@ -66,6 +73,7 @@ namespace MultiplayerServer
             this.health = health;
             this.maxHealth = maxHealth;
             this.healthBlue = healthBlue;
+            this.isHost = isHost;
         }
 
         public void SetPosition(Vector3 position)
@@ -85,7 +93,7 @@ namespace MultiplayerServer
         public void SetAnimation(string animation)
         {
             this.animation = animation;
-
+            
             ServerSend.PlayerAnimation(this);
         }
 
